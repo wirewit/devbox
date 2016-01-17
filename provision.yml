@@ -1,11 +1,13 @@
 ---
-- name: Setup devbox vm
+- name: Setup LXC cluster
+  hosts: all
+  roles:
+    - lxc
+
+- name: Install dev tools
   hosts: all
 
   tasks:
-
-    - name: add ansible repo
-      apt_repository: repo=ppa:ansible/ansible
 
     - name: add tmux repo
       apt_repository: repo='ppa:pi-rho/dev'
@@ -14,13 +16,8 @@
       apt: name={{item}} state=latest update_cache=yes
       with_items:
         - unzip
-        - lxc
-        - lxc-dev
-        - dnsmasq
-        - iptables-persistent
         - git
         - mercurial
-        - ansible
         - python-pip
         - python-dev
         - python3
@@ -32,7 +29,6 @@
     - name: install python packages
       pip: name={{item}} state=latest
       with_items:
-        - lxc-python2
         - tox
         - nodeenv
         - devpi-web
@@ -60,17 +56,17 @@
           src: templates/pydistutils.cfg
           dest: /root/.pydistutils.cfg
 
-    - name: create env for node packages
-      command: nodeenv --prebuilt /opt/node creates=/opt/node
+    #- name: create env for node packages
+    #  command: nodeenv --prebuilt /opt/node creates=/opt/node
 
-    - name: install ungit
-      npm: executable=/opt/node/bin/npm global=yes name=ungit state=latest
-      environment:
-          PATH: /opt/node/bin:{{lookup('env', 'PATH')}}
+    #- name: install ungit
+    #  npm: executable=/opt/node/bin/npm global=yes name=ungit state=latest
+    #  environment:
+    #      PATH: /opt/node/bin:{{lookup('env', 'PATH')}}
 
-    - name: create supervisor config for ungit
-      template: src=templates/ungit.conf dest=/etc/supervisor/conf.d/ungit.conf
-      notify: update supervisor services
+    #- name: create supervisor config for ungit
+    #  template: src=templates/ungit.conf dest=/etc/supervisor/conf.d/ungit.conf
+    #  notify: update supervisor services
 
     - name: create webserver dir
       file: path=/srv/www/ state=directory
@@ -95,43 +91,10 @@
       apt: pkg=tmux state=latest update_cache=no
       register: tmux
 
-    - name: create dnsmasq config file
-      file: path=/etc/lxc/dnsmasq.conf state=touch
-
-    - name: set lxc domain name
-      lineinfile:
-        dest: /etc/default/lxc-net
-        regexp: "{{item.regexp}}"
-        line: "{{item.line}}"
-      with_items:
-        - regexp: ^LXC_DOMAIN=
-          line: LXC_DOMAIN="lxc"
-        - regexp: ^LXC_DHCP_CONFILE=
-          line: LXC_DHCP_CONFILE=/etc/lxc/dnsmasq.conf
-      notify:
-        - restart lxc-net
-
-    - name: setup lxc nameserver
-      lineinfile:
-        dest: /etc/dnsmasq.d/lxc
-        regexp: ^server=
-        line: server=/lxc/10.0.3.1
-      notify:
-        - restart lxc-net
-
-    - name: create base container
-      command: >
-          lxc-create --name base-ubuntu -t ubuntu -- r trusty
-          --user dev --password dev
-          creates=/var/lib/lxc/base-ubuntu/config
-
   handlers:
 
     - name: update supervisor services
       command: supervisorctl update
-
-    - name: restart lxc-net
-      service: name=lxc-net state=restarted
 
     - name: restart nginx
       service: name=nginx state=restarted
